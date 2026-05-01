@@ -8,3 +8,6 @@ pymongo
 pytest
 flake8
 python-dotenv
+imbalanced-learn
+pymongo[srv]>=4.7
+python-dotenv>=1.0
