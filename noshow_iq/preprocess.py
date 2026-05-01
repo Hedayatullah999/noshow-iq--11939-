@@ -1,46 +1,40 @@
 import pandas as pd
-import numpy as np
-
-def load_data(file_path):
-    """Load the raw dataset."""
-    return pd.read_csv(file_path)
 
 def clean_data(df):
-    """
-    1. Rename misspelled columns.
-    2. Fix invalid ages.
-    3. Create feature: days_in_advance.
-    """
-    # Fix typos in the Kaggle dataset
-    df = df.rename(columns={
-        'Hipertension': 'Hypertension',
-        'Handcap': 'Handicap',
-        'SMS_received': 'SMSReceived',
-        'No-show': 'NoShow'
-    })
+    """Clean the raw dataset and perform initial feature engineering."""
+    df = df.copy()
     
-    # Remove negative ages
-    df = df[df['Age'] >= 0]
-    
-    # Convert dates and remove timezone info for calculation
-    df['ScheduledDay'] = pd.to_datetime(df['ScheduledDay'], utc=True).dt.tz_localize(None)
-    df['AppointmentDay'] = pd.to_datetime(df['AppointmentDay'], utc=True).dt.tz_localize(None)
-    
-    # Feature Engineering: Calculate days between scheduling and appointment
-    df['days_in_advance'] = (df['AppointmentDay'].dt.normalize() - df['ScheduledDay'].dt.normalize()).dt.days
-    
-    # Remove rows where appointment was set before the scheduled date
-    df = df[df['days_in_advance'] >= 0]
-    
+    # 1. Fix typos in columns if they exist
+    rename_map = {'Hipertension': 'Hypertension', 'Handcap': 'Handicap', 'SMS_received': 'SMSReceived'}
+    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+
+    # 2. Convert date columns to datetime objects
+    for col in ['ScheduledDay', 'AppointmentDay']:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col])
+
+    # 3. Filter negative ages ONLY if the column exists
+    if 'Age' in df.columns:
+        df = df[df['Age'] >= 0]
+
+    # 4. Feature Engineering: Calculate days_in_advance
+    if 'ScheduledDay' in df.columns and 'AppointmentDay' in df.columns:
+        # FIX: Normalize to midnight then subtract to get the Timedelta
+        # This keeps the .dt accessor available for .days
+        scheduled = df['ScheduledDay'].dt.normalize()
+        appointment = df['AppointmentDay'].dt.normalize()
+        df['days_in_advance'] = (appointment - scheduled).dt.days
+        
+        # Ensure day_of_week is also present for the model
+        df['day_of_week'] = df['AppointmentDay'].dt.dayofweek
+        
     return df
 
-if __name__ == "__main__":
-    # Pointing to your local data folder
-    try:
-        raw_data_path = "data/KaggleV2-May-2016.csv"
-        data = load_data(raw_data_path)
-        cleaned_data = clean_data(data)
-        print("✅ Preprocessing Successful!")
-        print(f"Cleaned data shape: {cleaned_data.shape}")
-    except Exception as e:
-        print(f"❌ Error: {e}")
+def extract_features(df):
+    """Select only the specific features required by the model for prediction."""
+    features = [
+        'Age', 'Scholarship', 'Hypertension', 'Diabetes', 
+        'Alcoholism', 'Handicap', 'SMSReceived', 'days_in_advance', 'day_of_week'
+    ]
+    # Return only the columns that exist in the dataframe from our feature list
+    return df[[col for col in features if col in df.columns]]
